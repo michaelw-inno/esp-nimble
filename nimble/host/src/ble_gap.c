@@ -1965,7 +1965,7 @@ ble_gap_rx_conn_complete(struct ble_gap_conn_complete *evt, uint8_t instance)
     ble_gap_event_listener_call(&event);
     ble_gap_call_conn_event_cb(&event, evt->connection_handle);
 
-    ble_gap_rd_rem_sup_feat_tx(evt->connection_handle);
+    //ble_gap_rd_rem_sup_feat_tx(evt->connection_handle);
 
     return 0;
 #else
