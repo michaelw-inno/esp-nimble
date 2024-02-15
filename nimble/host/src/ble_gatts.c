@@ -1529,6 +1529,14 @@ ble_gatts_chr_updated(uint16_t chr_val_handle)
             break;
         }
 
+        /* NOTE: Do not proceed if an attempt to access a cfg that does not exist happens.
+         * This scenario happens while sending multiple notifications at a high rate and the
+         * connection is preempted abruptly. This is basically a race condition.
+         */
+        if (conn->bhc_gatt_svr.num_clt_cfgs <= clt_cfg_idx){
+            break;
+        }
+
         BLE_HS_DBG_ASSERT_EVAL(conn->bhc_gatt_svr.num_clt_cfgs >
                                clt_cfg_idx);
         clt_cfg = conn->bhc_gatt_svr.clt_cfgs + clt_cfg_idx;
