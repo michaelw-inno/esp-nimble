@@ -23,12 +23,29 @@
 #include "ble_hs_priv.h"
 #include "ble_hs_resolv_priv.h"
 #include "host/ble_hs_pvcy.h"
+#include <nvs_flash.h>
+#include "esp_log.h"
+
+static esp_err_t bt_get_nvs(const char* namespace,
+                            const char* key_name,
+                            uint8_t *data,
+                            size_t data_len);
+static esp_err_t bt_store_nvs(const char* namespace,
+                              const char* key_name,
+                              uint8_t *data,
+                              uint8_t data_len);
+
+#define DEBUG_TAG          "BLE_HS_PVCY"
+
+#define HS_PVCY_NAMESPACE  "HS_PVCY"
+#define HS_PVCY_FLAG_KEY   "HS_FLAG_KEY"
+#define HS_PVCY_IRK_KEY    "HS_IRK_KEY"
 
 static uint8_t ble_hs_pvcy_started;
 static uint8_t ble_hs_pvcy_irk[16];
 
 /** Use this as a default IRK if none gets set. */
-const uint8_t ble_hs_pvcy_default_irk[16] = {
+uint8_t ble_hs_pvcy_default_irk[16] = {
     0xef, 0x8d, 0xe2, 0x16, 0x4f, 0xec, 0x43, 0x0d,
     0xbf, 0x5b, 0xdd, 0x34, 0xc0, 0x53, 0x1e, 0xb8,
 };
@@ -209,6 +226,18 @@ ble_hs_pvcy_set_our_irk(const uint8_t *irk)
     uint8_t tmp_addr[6];
     uint8_t new_irk[16];
     int rc;
+    uint8_t irk_gen_flag = 0u;
+
+    if (ESP_OK != bt_get_nvs(HS_PVCY_NAMESPACE, HS_PVCY_FLAG_KEY, &irk_gen_flag, sizeof irk_gen_flag)){
+        ESP_LOGI(DEBUG_TAG, "Generating IRK...");
+        rc = ble_hs_hci_util_rand(ble_hs_pvcy_default_irk, sizeof ble_hs_pvcy_default_irk);
+        bt_store_nvs(HS_PVCY_NAMESPACE, HS_PVCY_FLAG_KEY, &irk_gen_flag, sizeof irk_gen_flag);
+        bt_store_nvs(HS_PVCY_NAMESPACE, HS_PVCY_IRK_KEY, ble_hs_pvcy_default_irk, sizeof ble_hs_pvcy_default_irk);
+    }
+    else{
+        bt_get_nvs(HS_PVCY_NAMESPACE, HS_PVCY_IRK_KEY, ble_hs_pvcy_default_irk, sizeof ble_hs_pvcy_default_irk);
+        ESP_LOGI(DEBUG_TAG, "IRK loaded from NVS!");
+    }
 
     if (irk != NULL) {
         memcpy(new_irk, irk, 16);
@@ -332,3 +361,73 @@ ble_hs_pvcy_rpa_config(uint8_t enable)
     return rc;
 }
 #endif
+
+
+/**
+ * @brief Reads data from the NVS.
+ *
+ * @param namespace  The namespace to read from.
+ * @param key_name   The key corresponding to the location to be read.
+ * @param data       Location where to store the data.
+ * @param data_len   Lenght of the data buffer.
+ * @return esp_err_t The return code.
+ */
+static esp_err_t bt_get_nvs(const char* namespace,
+                            const char* key_name,
+                            uint8_t *data,
+                            size_t data_len)
+{
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open(namespace, NVS_READONLY, &nvs_handle);
+
+    if (ESP_OK != err) {
+        if (ESP_ERR_NVS_NOT_FOUND == err){
+            ESP_LOGW(DEBUG_TAG, "Failed to open nvs: %s.", esp_err_to_name(err));
+        }
+        else{
+            ESP_LOGE(DEBUG_TAG, "Failed to open nvs: %s", esp_err_to_name(err));
+        }
+    } else {
+        err = nvs_get_blob(nvs_handle, key_name, data, &data_len);
+    }
+
+    nvs_close(nvs_handle);
+    return err;
+}
+
+/**
+ * @brief Stores data in the NVS.
+ *
+ * @param namespace  The namespace to read from.
+ * @param key_name   The key corresponding to the location to be read.
+ * @param data       Location where to store the data.
+ * @param data_len   Lenght of the data buffer.
+ * @return esp_err_t The return code.
+ */
+static esp_err_t bt_store_nvs(const char* namespace,
+                              const char* key_name,
+                              uint8_t *data,
+                              uint8_t data_len)
+{
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open(namespace, NVS_READWRITE, &nvs_handle);
+
+    if(ESP_OK != err) {
+        ESP_LOGE(DEBUG_TAG, "Failed to open nvs: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = nvs_set_blob(nvs_handle, key_name, data, data_len);
+
+    if(ESP_OK == err) {
+        err = nvs_commit(nvs_handle);
+        if(ESP_OK != err) {
+            ESP_LOGE(DEBUG_TAG, "Failed to commit the changes: %s", esp_err_to_name(err));
+        }
+    } else {
+        ESP_LOGE(DEBUG_TAG, "Failed to set the changes: %s", esp_err_to_name(err));
+    }
+
+    nvs_close(nvs_handle);
+    return err;
+}
