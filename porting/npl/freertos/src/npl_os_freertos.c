@@ -895,27 +895,6 @@ IRAM_ATTR npl_freertos_callout_is_active(struct ble_npl_callout *co)
 ble_npl_time_t
 IRAM_ATTR npl_freertos_callout_get_ticks(struct ble_npl_callout *co)
 {
-#if CONFIG_BT_NIMBLE_USE_ESP_TIMER
-   /* Currently, esp_timer does not support an API which gets the expiry time for
-    * current timer.
-    * Returning 0 from here should not cause any effect.
-    * Drawback of this approach is that existing code to reset timer would be called
-    * more often (since the if condition to invoke reset timer would always succeed if
-    * timer is active).
-    */
-
-    return 0;
-#else
-    struct ble_npl_callout_freertos *callout = (struct ble_npl_callout_freertos *)co->co;
-    return xTimerGetExpiryTime(callout->handle);
-#endif
-}
-
-ble_npl_time_t
-IRAM_ATTR npl_freertos_callout_remaining_ticks(struct ble_npl_callout *co,
-                                     ble_npl_time_t now)
-{
-    ble_npl_time_t rt;
     uint32_t exp = 0;
 
     struct ble_npl_callout_freertos *callout = (struct ble_npl_callout_freertos *)co->co;
@@ -942,6 +921,16 @@ IRAM_ATTR npl_freertos_callout_remaining_ticks(struct ble_npl_callout *co,
 #else
     exp = xTimerGetExpiryTime(callout->handle);
 #endif
+
+    return exp;
+}
+
+ble_npl_time_t
+npl_freertos_callout_remaining_ticks(struct ble_npl_callout *co,
+                                     ble_npl_time_t now)
+{
+    ble_npl_time_t rt;
+    uint32_t exp = npl_freertos_callout_get_ticks(co);
 
     if (exp > now) {
         rt = exp - now;
