@@ -156,6 +156,7 @@ struct hci_conn_update;
 #define BLE_GAP_EVENT_SUBRATE_CHANGE        27
 #define BLE_GAP_EVENT_VS_HCI                28
 #define BLE_GAP_EVENT_REATTEMPT_COUNT       29
+#define BLE_GAP_EVENT_PAIRING_REQUEST       30
 
 /*** Reason codes for the subscribe GAP event. */
 
@@ -455,6 +456,15 @@ struct ble_gap_disc_desc {
      */
     ble_addr_t direct_addr;
 };
+
+struct ble_gap_pairing_req {
+    uint16_t conn_handle;
+    /** Properties of the existing pairing request */
+    uint8_t io_cap;
+    uint8_t oob_data_flag;
+    uint8_t authreq;
+};
+
 
 struct ble_gap_repeat_pairing {
     /** The handle of the relevant connection. */
@@ -824,6 +834,24 @@ struct ble_gap_event {
             /** The handle of the relevant connection. */
             uint16_t conn_handle;
         } identity_resolved;
+
+        /**
+         * Represents a pairing request from peer.
+         *
+         * Valid for following event types:
+         *     o BLE_GAP_EVENT_PAIRING_REQUEST
+         * The application can accept or reject pairing request. For accepting
+         * the request without a passkey query event application should return
+         * 0. It will automatically accepted with assumption that IO type is
+         * JUSTWORKS. For accepting or rejecting the request the
+         * application should provide non-zero return code e.g.
+         * BLE_SM_ERR_AUTHREQ. This way passkey query event will be raised and
+         * application provide its accept/reject request using
+         * `ble_sm_inject_io` API.
+         *     o Accept with JUSTWORKS : Return 0
+         *     o Accept/Reject choice : Return appropriate error BLE_SM_*
+         */
+        struct ble_gap_pairing_req pairing_req;
 
         /**
          * Represents a peer's attempt to pair despite a bond already existing.
